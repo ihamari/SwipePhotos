@@ -16,24 +16,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.ImageLoader
-import coil.ImageLoaderFactory
-import coil.decode.VideoFrameDecoder
 import com.swipe.photomanager.data.PhotoViewModel
 import com.swipe.photomanager.ui.MonthSelectionScreen
 import com.swipe.photomanager.ui.ReviewScreen
 import com.swipe.photomanager.ui.SwipeScreen
 import com.swipe.photomanager.ui.theme.PhotoManagerTheme
 
-class MainActivity : ComponentActivity(), ImageLoaderFactory {
-    override fun newImageLoader(): ImageLoader {
-        return ImageLoader.Builder(this)
-            .components {
-                add(VideoFrameDecoder.Factory())
-            }
-            .build()
-    }
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

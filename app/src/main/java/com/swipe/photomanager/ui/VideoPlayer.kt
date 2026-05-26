@@ -14,7 +14,7 @@ import androidx.media3.ui.PlayerView
 @Composable
 fun VideoPlayer(uri: android.net.Uri, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val exoPlayer = remember {
+    val exoPlayer = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             val mediaItem = MediaItem.fromUri(uri)
             setMediaItem(mediaItem)

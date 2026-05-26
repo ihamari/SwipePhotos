@@ -2,8 +2,12 @@ package com.swipe.photomanager.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,13 +32,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -41,6 +50,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.swipe.photomanager.data.MediaItem
 import com.swipe.photomanager.data.MediaType
@@ -54,6 +65,7 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
     val items by viewModel.currentMonthItems.collectAsState()
     val month by viewModel.selectedMonth.collectAsState()
     var currentIndex by remember { mutableIntStateOf(0) }
+    var isFullscreen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -88,7 +100,6 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Preview Previous
                     if (currentIndex > 0) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Anterior", fontSize = 10.sp)
@@ -99,14 +110,13 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
                                     .size(60.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Fit
                             )
                         }
                     }
                     
-                    Box(modifier = Modifier.size(20.dp)) // Spacer
+                    Box(modifier = Modifier.size(20.dp))
 
-                    // Preview Next
                     if (currentIndex + 1 < items.size) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Próxima", fontSize = 10.sp)
@@ -117,22 +127,20 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
                                     .size(60.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Fit
                             )
                         }
                     }
                 }
 
                 if (currentIndex < items.size) {
-                    // Background card (Next)
                     val nextIndex = currentIndex + 1
                     if (nextIndex < items.size) {
                         key(items[nextIndex].id) {
-                            SwipeCard(item = items[nextIndex], onSwiped = {}, isNext = true)
+                            SwipeCard(item = items[nextIndex], onSwiped = {}, isNext = true, onFullscreen = {})
                         }
                     }
 
-                    // Foreground card (Current)
                     key(items[currentIndex].id) {
                         SwipeCard(
                             item = items[currentIndex],
@@ -147,7 +155,8 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
                                     viewModel.setFinished(true)
                                 }
                             },
-                            isNext = false
+                            isNext = false,
+                            onFullscreen = { isFullscreen = true }
                         )
                     }
                 } else {
@@ -159,6 +168,13 @@ fun SwipeScreen(viewModel: PhotoViewModel) {
             }
         }
     }
+
+    if (isFullscreen && currentIndex < items.size) {
+        FullscreenPreview(
+            item = items[currentIndex],
+            onClose = { isFullscreen = false }
+        )
+    }
 }
 
 enum class SwipeDirection { LEFT, RIGHT }
@@ -167,7 +183,8 @@ enum class SwipeDirection { LEFT, RIGHT }
 fun SwipeCard(
     item: MediaItem,
     onSwiped: (SwipeDirection) -> Unit,
-    isNext: Boolean
+    isNext: Boolean,
+    onFullscreen: () -> Unit
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val swipeThreshold = 100.dp
@@ -176,7 +193,7 @@ fun SwipeCard(
 
     Card(
         modifier = Modifier
-            .fillMaxSize(0.75f) // Reduced size to show previews above
+            .fillMaxSize(0.75f)
             .offset(y = 40.dp)
             .offset { IntOffset(offsetX.value.roundToInt(), 0) }
             .graphicsLayer {
@@ -209,6 +226,7 @@ fun SwipeCard(
                     }
                 )
             }
+            .clickable(enabled = !isNext) { onFullscreen() }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (item.type == MediaType.VIDEO && !isNext) {
@@ -218,7 +236,7 @@ fun SwipeCard(
                     model = item.uri,
                     contentDescription = item.name,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Fit
                 )
             }
 
@@ -238,6 +256,67 @@ fun SwipeCard(
                     fontSize = 32.sp,
                     style = androidx.compose.ui.text.TextStyle(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun FullscreenPreview(item: MediaItem, onClose: () -> Unit) {
+    var rotation by remember { mutableFloatStateOf(0f) }
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val state = rememberTransformableState { zoomChange, offsetChange, rotationChange ->
+        scale *= zoomChange
+        offset += offsetChange
+        // Desativamos rotação por gesto para usar o botão
+    }
+
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        rotationZ = rotation,
+                        translationX = offset.x,
+                        translationY = offset.y
+                    )
+                    .transformable(state = state)
+            ) {
+                if (item.type == MediaType.VIDEO) {
+                    VideoPlayer(uri = item.uri, modifier = Modifier.fillMaxSize())
+                } else {
+                    AsyncImage(
+                        model = item.uri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+
+            // Controls
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                IconButton(onClick = { rotation += 90f }) {
+                    Icon(Icons.Default.RotateRight, contentDescription = "Rotacionar", tint = Color.White)
+                }
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+                }
             }
         }
     }

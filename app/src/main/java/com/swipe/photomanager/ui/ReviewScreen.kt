@@ -1,6 +1,8 @@
 package com.swipe.photomanager.ui
 
 import android.app.Activity
+import android.app.RecoverableSecurityException
+import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -73,23 +75,35 @@ fun ReviewScreen(viewModel: PhotoViewModel) {
             Button(
                 onClick = {
                     if (itemsToDelete.isNotEmpty()) {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                            val pendingIntent = MediaStore.createDeleteRequest(
-                                context.contentResolver,
-                                itemsToDelete.map { it.uri }
-                            )
-                            deleteLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
-                        } else {
-                            // Basic delete for older versions
-                            itemsToDelete.forEach { item ->
-                                try {
-                                    context.contentResolver.delete(item.uri, null, null)
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                // Android 11+
+                                val pendingIntent = MediaStore.createDeleteRequest(
+                                    context.contentResolver,
+                                    itemsToDelete.map { it.uri }
+                                )
+                                deleteLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
+                            } else {
+                                // Android 10 e anteriores
+                                itemsToDelete.forEach { item ->
+                                    try {
+                                        context.contentResolver.delete(item.uri, null, null)
+                                    } catch (securityException: SecurityException) {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && 
+                                            securityException is RecoverableSecurityException) {
+                                            val intentSender = securityException.userAction.actionIntent.intentSender
+                                            deleteLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                                            return@Button
+                                        } else {
+                                            throw securityException
+                                        }
+                                    }
                                 }
+                                viewModel.finishReview()
+                                viewModel.loadMedia()
                             }
-                            viewModel.finishReview()
-                            viewModel.loadMedia()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                         }
                     } else {
                         viewModel.finishReview()
@@ -103,7 +117,7 @@ fun ReviewScreen(viewModel: PhotoViewModel) {
                 )
             ) {
                 Text(
-                    if (itemsToDelete.isNotEmpty()) "Deletar ${itemsToDelete.size} itens"
+                    if (itemsToDelete.isNotEmpty()) "Confirmar Exclusão (${itemsToDelete.size})"
                     else "Finalizar Revisão"
                 )
             }
@@ -131,7 +145,7 @@ fun ReviewScreen(viewModel: PhotoViewModel) {
                             model = item.uri,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                             alpha = if (isMarkedForDeletion) 0.5f else 1f
                         )
                         if (item.type == MediaType.VIDEO) {
