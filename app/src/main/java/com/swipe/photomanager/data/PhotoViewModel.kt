@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 
 class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MediaRepository(application)
+    private val sharedPreferences = application.getSharedPreferences("photo_manager_prefs", Application.MODE_PRIVATE)
 
     private val _mediaByMonth = MutableStateFlow<Map<String, List<MediaItem>>>(emptyMap())
     val mediaByMonth: StateFlow<Map<String, List<MediaItem>>> = _mediaByMonth.asStateFlow()
@@ -23,11 +24,19 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
     private val _itemsToDelete = MutableStateFlow<Set<MediaItem>>(emptySet())
     val itemsToDelete = _itemsToDelete.asStateFlow()
 
-    private val _completedMonths = MutableStateFlow<Set<String>>(emptySet())
+    private val _completedMonths = MutableStateFlow<Set<String>>(loadCompletedMonths())
     val completedMonths = _completedMonths.asStateFlow()
 
     private val _isFinished = MutableStateFlow(false)
     val isFinished = _isFinished.asStateFlow()
+
+    private fun loadCompletedMonths(): Set<String> {
+        return sharedPreferences.getStringSet("completed_months", null)?.toSet() ?: emptySet()
+    }
+
+    private fun saveCompletedMonths(months: Set<String>) {
+        sharedPreferences.edit().putStringSet("completed_months", months).apply()
+    }
 
     fun loadMedia() {
         viewModelScope.launch {
@@ -65,7 +74,9 @@ class PhotoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun finishReview() {
         selectedMonth.value?.let {
-            _completedMonths.value = _completedMonths.value + it
+            val newCompleted = _completedMonths.value + it
+            _completedMonths.value = newCompleted
+            saveCompletedMonths(newCompleted)
         }
         _isFinished.value = false
         _selectedMonth.value = null
